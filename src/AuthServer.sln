@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuthServer.Web", "AuthServer.Web\AuthServer.Web.csproj", "{8703B83F-847E-4077-B440-CD84D3A258EB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuthServer.Contracts", "AuthServer.Contracts\AuthServer.Contracts.csproj", "{21D804A1-FC1A-4368-B0A2-75778CC011C0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuthServer.Stripe.SDK", "AuthServer.Stripe.SDK\AuthServer.Stripe.SDK.csproj", "{1AA54CD4-3F17-4F33-949F-F931CFDEE354}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AuthServer.AWS.SDK", "AuthServer.AWS.SDK\AuthServer.AWS.SDK.csproj", "{6BCFA912-8815-44B2-BEFD-7F2660698ACC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8703B83F-847E-4077-B440-CD84D3A258EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8703B83F-847E-4077-B440-CD84D3A258EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8703B83F-847E-4077-B440-CD84D3A258EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8703B83F-847E-4077-B440-CD84D3A258EB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{21D804A1-FC1A-4368-B0A2-75778CC011C0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21D804A1-FC1A-4368-B0A2-75778CC011C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21D804A1-FC1A-4368-B0A2-75778CC011C0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21D804A1-FC1A-4368-B0A2-75778CC011C0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1AA54CD4-3F17-4F33-949F-F931CFDEE354}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1AA54CD4-3F17-4F33-949F-F931CFDEE354}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1AA54CD4-3F17-4F33-949F-F931CFDEE354}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1AA54CD4-3F17-4F33-949F-F931CFDEE354}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6BCFA912-8815-44B2-BEFD-7F2660698ACC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6BCFA912-8815-44B2-BEFD-7F2660698ACC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6BCFA912-8815-44B2-BEFD-7F2660698ACC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6BCFA912-8815-44B2-BEFD-7F2660698ACC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
