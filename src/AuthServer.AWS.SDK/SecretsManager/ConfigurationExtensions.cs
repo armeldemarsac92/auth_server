@@ -46,7 +46,7 @@ public static class ConfigurationExtensions
     
     public static void ConfigureAwsSecrets(this IConfigurationBuilder builder, string baseEnv, params SecretType[] secretTypes)
     {
-        string sharedBase = $"tdev702/{baseEnv}/shared/";
+        string sharedBase = $"authServer/{baseEnv}/shared/";
         
         var filterValues = secretTypes.Select(t => $"{sharedBase}{t.ToString().ToLower()}").ToList();
         
