@@ -292,6 +292,105 @@ Response:
 }
 ```
 
+You're right, I didn't cover the Simple Login functionality in detail. Let me add that section to the API documentation:
+
+### Simple Login Flow
+
+The Simple Login flow provides a streamlined authentication experience for returning users, particularly in scenarios where traditional password entry isn't required (like when using external identity providers or leveraging 2FA directly).
+
+```
+POST /api/auth/simple-login
+```
+
+Initiates a login flow based on the user's email and preferred 2FA method, bypassing the initial password authentication step when appropriate.
+
+Request body:
+```json
+{
+  "email": "user@example.com",
+  "two_factor_code": "123456"
+}
+```
+
+Response when 2FA is required:
+```json
+{
+  "requiresTwoFactor": true,
+  "provider": "Email"
+}
+```
+
+Response after successful 2FA verification:
+```json
+{
+  "accessToken": "eyJhbGciOiJ...",
+  "refreshToken": "eyJhbGciOiJ...",
+  "expiresIn": 3600
+}
+```
+
+#### Implementation Details
+
+The Simple Login endpoint streamlines the authentication process by:
+
+1. Looking up a user by email without initial password verification
+2. Determining the user's preferred 2FA method
+3. Initiating the appropriate 2FA challenge (email, authenticator app, or SMS)
+4. Verifying 2FA codes when provided
+5. Issuing authentication tokens upon successful verification
+
+```csharp
+private static async Task<IResult> SimpleLogin(
+    UserManager<User> userManager,
+    ITokenService tokenService,
+    SignInManager<User> signInManager,
+    IEmailService emailService,
+    SimpleLoginRequest request)
+{
+    var user = await userManager.FindByEmailAsync(request.Email);
+    if (user == null)
+    {
+        throw new BadRequestException("User not found");
+    }
+    
+    switch (user.PreferredTwoFactorProvider)
+    {
+        case TwoFactorType.Email:
+            var emailToken = await signInManager.UserManager.GenerateTwoFactorTokenAsync(user, "Email");
+            await emailService.SendEmailAsync(
+                user.Email,
+                "2FA Code",
+                $"Your verification code is: {emailToken}");
+            return Results.Ok(new { requiresTwoFactor = true, provider = "Email" });
+            
+        case TwoFactorType.Authenticator:
+            if (!string.IsNullOrEmpty(request.TwoFactorCode))
+            {
+                var isValid = await userManager.VerifyTwoFactorTokenAsync(user, 
+                    TokenOptions.DefaultAuthenticatorProvider, 
+                    request.TwoFactorCode);
+
+                if (isValid)
+                {
+                    return Results.Ok(await tokenService.GetAccessTokenAsync(user));
+                }
+                throw new BadRequestException("Invalid 2FA code");
+            }
+            return Results.Ok(new { requiresTwoFactor = true, provider = "Authenticator" });
+            
+        // Additional 2FA methods handled similarly
+    }
+}
+```
+
+This approach is particularly useful for applications where:
+- Users primarily authenticate with external identity providers
+- 2FA is mandatory across the application
+- You want to provide a simplified login experience for returning users
+- You're implementing passwordless authentication flows
+
+The Simple Login integrates with the 2FA verification endpoint to complete the authentication process, making it a versatile option for modern authentication scenarios.
+
 #### Email Verification Flow
 
 ```
