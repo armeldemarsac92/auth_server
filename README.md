@@ -10,8 +10,8 @@ A sophisticated, enterprise-grade authentication service built with .NET, provid
 4. [Prerequisites](#prerequisites)
 5. [Configuration](#configuration-guide)
 6. [Getting Started](#getting-started)
-8. [API Documentation](#api-documentation)
-9. [Security Features](#security-features-and-implementation)
+7. [API Documentation](#api-documentation)
+8. [Security Features](#security-features-and-implementation)
 
 ## Project Overview
 
@@ -21,7 +21,10 @@ This Authentication Server is designed as a complete identity management solutio
 
 ### Authentication Capabilities
 - Email and password authentication
-- Multi-factor authentication (2FA)
+- Multi-factor authentication (2FA) with multiple provider options:
+  - Email-based verification codes
+  - Authenticator apps (TOTP)
+  - SMS verification
 - OAuth 2.0 and OpenID Connect support
 - External identity provider integration (Google, Facebook, etc.)
 - JWT-based authentication with refresh token rotation
@@ -37,18 +40,17 @@ This Authentication Server is designed as a complete identity management solutio
 ### Integration Capabilities
 - AWS services integration (SES, CloudWatch, Secrets Manager)
 - Stripe payment processing
-- Redis caching support
-- Message queue integration
-- Monitoring and logging infrastructure
+- Event-driven user creation with MassTransit
+- Comprehensive logging infrastructure
 
 ### Security Features
-- XSRF protection
-- Rate limiting
-- Password hashing with modern algorithms
-- SSL/TLS encryption
+- CSRF/XSRF protection
+- Rate limiting for brute force attack prevention
+- Modern password hashing
+- SSL/TLS enforcement
 - Security headers management
 - Request validation
-
+- Secure token handling
 
 ## Architecture
 
@@ -97,18 +99,15 @@ Manages payment processing functionality:
 - **Customer Management**: User payment profiles
 - **Payment Processing**: Transaction handling
 - **Invoice Management**: Billing operations
-- **Session Management**: Checkout sessions
-
-Let me provide a comprehensive prerequisites section that covers all the required external services and configurations for this authentication server:
 
 ## Prerequisites
 
-Before setting up the Authentication Server, you'll need to configure several external services and ensure your development environment meets specific requirements. Let's walk through each component:
+Before setting up the Authentication Server, you'll need to configure several external services and ensure your development environment meets specific requirements:
 
 ### Development Environment
 - .NET 8.0 SDK or later
 - PostgreSQL 13.0 or later
-- Redis 6.2 or later for distributed caching (optional, the server uses in memory caching)
+- Redis 6.2 or later for distributed caching (optional, the server uses in-memory caching by default)
 - Git for version control
 - Visual Studio 2022 or JetBrains Rider
 
@@ -133,13 +132,6 @@ For handling email communications, you'll need:
 - Appropriate sending limits configured
 - Production access if you plan to send to non-verified recipients
 - SES configured in the same region as your other AWS services
-
-#### AWS Simple Queue Service (SQS)
-For reliable message processing, configure:
-- Standard queues for each message type (user notifications, system events)
-- Dead letter queues for handling failed message processing
-- Appropriate message retention periods (typically 14 days)
-- Message visibility timeout settings based on your processing needs
 
 ### Stripe Integration
 To handle the user creation operations:
@@ -173,16 +165,6 @@ Create an IAM user or role with these permissions:
         {
             "Effect": "Allow",
             "Action": [
-                "sqs:SendMessage",
-                "sqs:ReceiveMessage",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes"
-            ],
-            "Resource": "arn:aws:sqs:eu-central-1:*:authServer-*"
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
                 "logs:CreateLogGroup",
                 "logs:CreateLogStream",
                 "logs:PutLogEvents"
@@ -192,29 +174,6 @@ Create an IAM user or role with these permissions:
     ]
 }
 ```
-
-### Configuration Verification
-Before proceeding with development, verify your setup:
-
-```bash
-# Test AWS Secrets Manager access
-aws secretsmanager get-secret-value --secret-id authServer/dev/shared/database
-
-# Test SES configuration
-aws ses get-send-quota
-aws ses verify-email-identity --email your-sender@yourdomain.com
-
-# Test SQS access
-aws sqs list-queues --queue-name-prefix authServer
-
-# Verify Stripe configuration
-stripe listen --forward-to http://localhost:5000/stripe/webhook
-```
-
-Remember to set up appropriate monitoring and alerting for these services in production. AWS CloudWatch can be configured to monitor SES bounces, SQS queue depths, and application logs. Stripe provides its own dashboard for monitoring payment-related events and webhook delivery status.
-
-For local development, we recommend using AWS CLI profiles to manage different AWS environments and Stripe's CLI for webhook testing. Never commit sensitive credentials to version control - always use environment variables or AWS Secrets Manager for configuration values.
-
 
 ## Configuration Guide
 
@@ -277,20 +236,11 @@ The application uses AWS Secrets Manager to securely store sensitive configurati
     ]
   },
   "DatabaseConfiguration": {
-    "Key": "your-database-key",
-    "Url": "your-database-url",
-    "Email": "database-admin@yourdomain.com",
-    "Password": "your-database-password",
-    "DbConnectionString": "Host=...;Database=...;Username=...;Password=...",
-    "SslCert": "-----BEGIN CERTIFICATE-----\n..."
+    "DbConnectionString": "Host=...;Database=...;Username=...;Password=..."
   },
   "StripeConfiguration": {
-    "ApiKey": "sk_test_..."
-  },
-  "CacheConfiguration": {
-    "Host": "your-redis-host",
-    "InstanceName": "your-instance-name",
-    "KeyPrefix": "auth"
+    "ApiKey": "sk_test_...",
+    "PaymentWebhookSecret": "whsec_..."
   }
 }
 ```
@@ -299,11 +249,11 @@ The application uses AWS Secrets Manager to securely store sensitive configurati
 
 ### Authentication Routes (`/api/auth/*`)
 
-The authentication endpoints handle all aspects of user identity and authentication flows. Each endpoint is designed with security and user experience in mind.
+The authentication endpoints handle all aspects of user identity and authentication flows.
 
 #### User Registration and Login
 
-```csharp
+```
 POST /api/auth/register
 ```
 Creates a new user account. The registration process includes email verification and optional 2FA setup.
@@ -312,13 +262,14 @@ Request body:
 ```json
 {
   "email": "user@example.com",
-  "password": "securePassword123",
-  "firstName": "John",
-  "lastName": "Doe"
+  "first_name": "John",
+  "last_name": "Doe",
+  "profile_picture": "https://example.com/avatar.jpg",
+  "password": "securePassword123"
 }
 ```
 
-```csharp
+```
 POST /api/auth/login
 ```
 Authenticates a user and returns JWT tokens. Handles 2FA challenges when enabled.
@@ -327,7 +278,8 @@ Request body:
 ```json
 {
   "email": "user@example.com",
-  "password": "securePassword123"
+  "password": "securePassword123",
+  "two_factor_code": "123456"
 }
 ```
 
@@ -336,19 +288,117 @@ Response:
 {
   "accessToken": "eyJhbGciOiJ...",
   "refreshToken": "eyJhbGciOiJ...",
-  "expiresIn": 3600,
-  "requires2FA": false
+  "expiresIn": 3600
 }
 ```
 
-#### Email Verification Flow
+You're right, I didn't cover the Simple Login functionality in detail. Let me add that section to the API documentation:
+
+### Simple Login Flow
+
+The Simple Login flow provides a streamlined authentication experience for returning users, particularly in scenarios where traditional password entry isn't required (like when using external identity providers or leveraging 2FA directly).
+
+```
+POST /api/auth/simple-login
+```
+
+Initiates a login flow based on the user's email and preferred 2FA method, bypassing the initial password authentication step when appropriate.
+
+Request body:
+```json
+{
+  "email": "user@example.com",
+  "two_factor_code": "123456"
+}
+```
+
+Response when 2FA is required:
+```json
+{
+  "requiresTwoFactor": true,
+  "provider": "Email"
+}
+```
+
+Response after successful 2FA verification:
+```json
+{
+  "accessToken": "eyJhbGciOiJ...",
+  "refreshToken": "eyJhbGciOiJ...",
+  "expiresIn": 3600
+}
+```
+
+#### Implementation Details
+
+The Simple Login endpoint streamlines the authentication process by:
+
+1. Looking up a user by email without initial password verification
+2. Determining the user's preferred 2FA method
+3. Initiating the appropriate 2FA challenge (email, authenticator app, or SMS)
+4. Verifying 2FA codes when provided
+5. Issuing authentication tokens upon successful verification
 
 ```csharp
+private static async Task<IResult> SimpleLogin(
+    UserManager<User> userManager,
+    ITokenService tokenService,
+    SignInManager<User> signInManager,
+    IEmailService emailService,
+    SimpleLoginRequest request)
+{
+    var user = await userManager.FindByEmailAsync(request.Email);
+    if (user == null)
+    {
+        throw new BadRequestException("User not found");
+    }
+    
+    switch (user.PreferredTwoFactorProvider)
+    {
+        case TwoFactorType.Email:
+            var emailToken = await signInManager.UserManager.GenerateTwoFactorTokenAsync(user, "Email");
+            await emailService.SendEmailAsync(
+                user.Email,
+                "2FA Code",
+                $"Your verification code is: {emailToken}");
+            return Results.Ok(new { requiresTwoFactor = true, provider = "Email" });
+            
+        case TwoFactorType.Authenticator:
+            if (!string.IsNullOrEmpty(request.TwoFactorCode))
+            {
+                var isValid = await userManager.VerifyTwoFactorTokenAsync(user, 
+                    TokenOptions.DefaultAuthenticatorProvider, 
+                    request.TwoFactorCode);
+
+                if (isValid)
+                {
+                    return Results.Ok(await tokenService.GetAccessTokenAsync(user));
+                }
+                throw new BadRequestException("Invalid 2FA code");
+            }
+            return Results.Ok(new { requiresTwoFactor = true, provider = "Authenticator" });
+            
+        // Additional 2FA methods handled similarly
+    }
+}
+```
+
+This approach is particularly useful for applications where:
+- Users primarily authenticate with external identity providers
+- 2FA is mandatory across the application
+- You want to provide a simplified login experience for returning users
+- You're implementing passwordless authentication flows
+
+The Simple Login integrates with the 2FA verification endpoint to complete the authentication process, making it a versatile option for modern authentication scenarios.
+
+#### Email Verification Flow
+
+```
 GET /api/auth/confirm-email/{userId}/{token}
 ```
 Validates email confirmation tokens sent to users upon registration.
 
-```csharp
+```
 POST /api/auth/resend-confirmation
 ```
 Resends the confirmation email if the original expires or is lost.
@@ -362,32 +412,24 @@ Request body:
 
 #### Password Management
 
-```csharp
+```
 POST /api/auth/forgot-password
 ```
-Initiates the password reset flow by sending a reset link via email.
+Initiates the password reset flow by sending a reset code via email.
 
-```csharp
+```
 POST /api/auth/reset-password
 ```
 Completes the password reset process with a valid reset token.
 
-Request body:
-```json
-{
-  "token": "reset-token",
-  "newPassword": "newSecurePassword123"
-}
-```
-
 #### Two-Factor Authentication
 
-```csharp
+```
 POST /api/2fa/enable/{type}
 ```
-Enables 2FA for a user account. Supported types include "authenticator" and "email".
+Enables 2FA for a user account. Supported types include "authenticator", "email", and "sms".
 
-```csharp
+```
 POST /api/2fa/verify
 ```
 Verifies 2FA setup or login challenges.
@@ -395,31 +437,30 @@ Verifies 2FA setup or login challenges.
 Request body:
 ```json
 {
-  "code": "123456",
-  "type": "authenticator"
+  "verification_code": "123456"
 }
 ```
 
-```csharp
+```
 POST /api/2fa/disable
 ```
-Disables 2FA for a user account (requires current 2FA code for verification).
+Disables 2FA for a user account (requires authentication).
 
 #### OAuth/External Authentication
 
-```csharp
+```
 GET /api/auth/external-login/{provider}
 ```
 Initiates OAuth flow with specified provider (e.g., "google", "facebook").
 
-```csharp
+```
 GET /api/auth/external-callback
 ```
 Handles OAuth provider callbacks and user creation/login.
 
 #### Token Management
 
-```csharp
+```
 POST /api/auth/refresh
 ```
 Issues new access tokens using a valid refresh token.
@@ -427,7 +468,7 @@ Issues new access tokens using a valid refresh token.
 Request body:
 ```json
 {
-  "refreshToken": "eyJhbGciOiJ..."
+  "refresh_token": "eyJhbGciOiJ..."
 }
 ```
 
@@ -435,53 +476,35 @@ Request body:
 
 These endpoints manage user roles and permissions within the system.
 
-```csharp
+```
 GET /api/roles
 ```
 Returns all available roles in the system.
 
-```csharp
+```
 POST /api/roles
 ```
 Creates a new role.
 
-Request body:
-```json
-{
-  "name": "admin",
-  "permissions": ["read", "write", "delete"]
-}
 ```
-
-```csharp
 DELETE /api/roles/{roleName}
 ```
 Removes an existing role.
 
-```csharp
+```
 POST /api/users/{userId}/roles
 ```
 Assigns roles to a user.
 
-Request body:
-```json
-{
-  "roles": ["admin", "user"]
-}
 ```
-
-```csharp
 DELETE /api/users/{userId}/roles/{roleName}
 ```
 Removes a role from a user.
 
-```csharp
+```
 GET /api/users/{userId}/roles
 ```
 Retrieves all roles assigned to a user.
-
-I'll revise the Security Features section to accurately reflect your actual implementation, writing it in a clear and educational way:
-
 
 ## Security Features and Implementation
 
@@ -489,7 +512,7 @@ The authentication server implements a comprehensive security architecture built
 
 ### Token Service Implementation
 
-The token service manages JWT generation and validation using asymmetric RSA encryption. Here's how it works:
+The token service manages JWT generation and validation using asymmetric RSA encryption:
 
 ```csharp
 public class TokenService : ITokenService
@@ -623,10 +646,9 @@ public async Task<UserInfos> GetUserInfosAsync(AuthenticationParameters paramete
 }
 ```
 
-
 ### Authentication Flow Integration
 
-When a user initiates external authentication through your system, a carefully orchestrated sequence of security checks and validations occurs. Here's how the components work together:
+When a user initiates external authentication, a carefully orchestrated sequence of security checks and validations occurs:
 
 #### Initial Authentication Request
 
@@ -647,7 +669,7 @@ private static async Task<IResult> ExternalLogin(
 }
 ```
 
-This initial step creates a secure foundation for the authentication process. The SecurityService stores a time-limited state token in the distributed cache, while the AuthService constructs a secure authorization URL that includes PKCE (Proof Key for Code Exchange) protection against interception attacks.
+This initial step creates a secure foundation for the authentication process by storing a time-limited state token in the distributed cache, while the AuthService constructs a secure authorization URL that includes PKCE protection against interception attacks.
 
 #### Handling the OAuth Callback
 
@@ -678,17 +700,9 @@ private static async Task<IResult> Callback(
 }
 ```
 
-This callback process implements multiple layers of security:
+This callback process implements multiple layers of security, from state validation to secure code exchange and standardized identity handling.
 
-1. The SecurityService validates the state token, ensuring it matches what was originally stored and hasn't expired. This prevents CSRF (Cross-Site Request Forgery) attacks.
-
-2. The AuthService handles the secure exchange of the authorization code for tokens, using the PKCE verifier to prevent code interception attacks.
-
-3. The user information is retrieved and standardized through a secure claims mapping process, ensuring consistent identity handling regardless of the provider.
-
-4. Finally, the TokenService generates application-specific tokens using asymmetric RSA encryption, providing secure access credentials to the user.
-
-#### Cookie Security Implementation
+### Cookie Security Implementation
 
 The final step involves secure cookie handling for the generated tokens:
 
@@ -701,7 +715,7 @@ private static void AddCookies(HttpContext context, AccessTokenResponse accessTo
         Secure = true,     // Requires HTTPS
         SameSite = SameSiteMode.Lax,   // Protects against CSRF
         Expires = DateTimeOffset.UtcNow.AddHours(2),
-        Domain = isDev ? ".localhost" : ".epitechproject.fr",
+        Domain = isDev ? ".localhost" : ".yourdomain.com",
         Path = "/"
     };
     
@@ -709,110 +723,6 @@ private static void AddCookies(HttpContext context, AccessTokenResponse accessTo
 }
 ```
 
-The cookie configuration provides several security features:
-- Secure flag ensures cookies are only sent over HTTPS
-- SameSite protection helps prevent CSRF attacks
-- Domain and Path restrictions limit cookie scope
-- Appropriate expiration times reduce the window of vulnerability
+The cookie configuration provides several security features to protect authentication tokens.
 
-#### Standard Login Flow
-
-The standard login process shows how these security components handle traditional authentication:
-
-```csharp
-private static async Task<IResult> Login(
-    UserManager<User> userManager,
-    ITokenService tokenService,
-    SignInManager<User> signInManager,
-    IEmailService emailService,
-    LoginUserRequest request)
-{
-    var result = await signInManager.PasswordSignInAsync(
-        request.Email,
-        request.Password,
-        isPersistent: false,
-        lockoutOnFailure: true);
-```
-
-This implementation includes several security features:
-- Account lockout protection against brute force attacks
-- Multi-factor authentication support with different provider options
-- Secure password verification through ASP.NET Identity
-- Email-based verification codes for additional security
-
-The system intelligently handles different 2FA scenarios:
-```csharp
-switch (user.PreferredTwoFactorProvider)
-{
-    case TwoFactorType.Email:
-        var emailToken = await signInManager.UserManager.GenerateTwoFactorTokenAsync(user, "Email");
-        await emailService.SendEmailAsync(
-            user.Email,
-            "2FA Code",
-            $"Your verification code is: {emailToken}");
-        return Results.Ok(new { requiresTwoFactor = true, provider = "Email" });
-```
-
-### Refresh Token Flow
-
-The refresh token implementation includes important security considerations:
-
-```csharp
-private static async Task<IResult> RefreshToken(
-    UserManager<User> userManager,
-    ITokenService tokenService,
-    RefreshTokenRequest request)
-{
-    var principal = tokenService.ValidateToken(request.RefreshToken, validateLifetime: false);
-    var userId = principal.FindFirst(ClaimTypes.NameIdentifier).Value;
-    var user = await userManager.FindByIdAsync(userId);
-```
-
-This flow is significant because it:
-- Validates the refresh token cryptographically even when expired
-- Extracts the user identifier from validated claims
-- Verifies the user still exists in the system
-- Issues fresh access and refresh tokens, implementing token rotation
-
-### Email Verification Security
-
-The email confirmation flow implements several security measures:
-
-```csharp
-private static async Task<IResult> ConfirmEmail(
-    UserManager<User> userManager,
-    string userId,
-    string token)
-{
-    var user = await userManager.FindByIdAsync(userId);
-    var decodedToken = Uri.UnescapeDataString(token);
-    var result = await userManager.ConfirmEmailAsync(user, decodedToken);
-```
-
-This implementation:
-- Uses secure tokens generated by ASP.NET Identity
-- Properly handles URL-encoded tokens to prevent corruption
-- Validates both the user ID and the confirmation token together
-- Marks email verification status in user claims
-
-### Password Reset Security
-
-The password reset flow includes important protections:
-
-```csharp
-private static async Task<IResult> ForgotPassword(
-    UserManager<User> userManager,
-    IEmailSender<User> emailSender,
-    LinkGenerator linkGenerator,
-    HttpContext httpContext,
-    ForgotPasswordRequest request)
-{
-    var user = await userManager.FindByEmailAsync(request.Email);
-    if (user == null) return Results.Ok(); 
-```
-
-This implementation provides security through:
-- Same response timing whether the user exists or not (preventing user enumeration)
-- Secure token generation for password reset
-- Email-based delivery of reset instructions
-- Limited-time token validity
+This comprehensive security implementation ensures that user authentication flows are protected at every step, from initial login to token usage, providing a robust foundation for application security.
