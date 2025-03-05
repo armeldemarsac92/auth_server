@@ -32,7 +32,6 @@ public static partial class AuthServiceExtensions
         services.AddSingleton<IKeyService, KeyService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<ISecurityService, SecurityService>();
-        services.AddTransient<IEmailSender<User>, EmailSender>();
         return services;
     }
 }
