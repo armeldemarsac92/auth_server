@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Stripe;
 
 namespace AuthServer.AWS.SDK.SecretsManager;
 
@@ -13,7 +14,7 @@ public static class ConfigurationExtensions
 {
     public static WebApplicationBuilder AddAwsConfiguration(this WebApplicationBuilder builder, params SecretType[] secretTypes)
     {
-        var baseEnv = builder.Environment.IsDevelopment()? "dev" : "prod";
+        var baseEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         ConfigureAwsSecrets(builder.Configuration, baseEnv, secretTypes);
         AddConfigurationOptions(builder.Services, builder.Configuration, secretTypes);
         return builder;
@@ -24,7 +25,7 @@ public static class ConfigurationExtensions
         
         hostBuilder.ConfigureAppConfiguration((context, builder) =>
         {
-            var baseEnv = context.HostingEnvironment.IsDevelopment()? "dev" : "prod";
+            var baseEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             ConfigureAwsSecrets(builder, baseEnv, secretTypes);
         });
 
@@ -38,15 +39,17 @@ public static class ConfigurationExtensions
     
     public static IHostApplicationBuilder AddAwsConfiguration(this IHostApplicationBuilder builder, params SecretType[] secretTypes)
     {
-        var baseEnv = builder.Environment.IsDevelopment()? "dev" : "prod";
+        var baseEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
         ConfigureAwsSecrets(builder.Configuration, baseEnv, secretTypes);
         AddConfigurationOptions(builder.Services, builder.Configuration, secretTypes);
         return builder;
     }
     
-    public static void ConfigureAwsSecrets(this IConfigurationBuilder builder, string baseEnv, params SecretType[] secretTypes)
+    public static void ConfigureAwsSecrets(this IConfigurationBuilder builder, string? baseEnv, params SecretType[] secretTypes)
     {
-        string sharedBase = $"authServer/{baseEnv}/shared/";
+
+        if (string.IsNullOrEmpty(baseEnv)) throw new Exception("ASPNETCORE_ENVIRONMENT missing.");
+        string sharedBase = $"tdev702/{baseEnv}/shared/";
         
         var filterValues = secretTypes.Select(t => $"{sharedBase}{t.ToString().ToLower()}").ToList();
         
@@ -72,32 +75,11 @@ public static class ConfigurationExtensions
                     ?? throw new InvalidOperationException("Database configuration not found"));
                 break;
 
-            case SecretType.Networking:
-                services.Configure<NetworkConfiguration>(configuration.GetSection("networking"));
-                services.AddSingleton(sp => 
-                    configuration.GetSection("networking").Get<NetworkConfiguration>() 
-                    ?? throw new InvalidOperationException("Network configuration not found"));
-                break;
-                
-            case SecretType.Stripe:
-                services.Configure<StripeConfiguration>(configuration.GetSection("stripe"));
-                services.AddSingleton(sp => 
-                    configuration.GetSection("stripe").Get<StripeConfiguration>() 
-                    ?? throw new InvalidOperationException("Stripe configuration not found"));
-                break;
-            
             case SecretType.Auth:
                 services.Configure<AuthConfiguration>(configuration.GetSection("auth"));
                 services.AddSingleton(sp => 
                     configuration.GetSection("auth").Get<AuthConfiguration>() 
                     ?? throw new InvalidOperationException("Auth configuration not found"));
-                break;
-            
-            case SecretType.Cache:
-                services.Configure<CacheConfiguration>(configuration.GetSection("cache"));
-                services.AddSingleton(sp => 
-                    configuration.GetSection("cache").Get<CacheConfiguration>() 
-                    ?? throw new InvalidOperationException("Cache configuration not found"));
                 break;
         }
     }

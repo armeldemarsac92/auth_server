@@ -9,13 +9,10 @@ public class User : IdentityUser
     public TwoFactorType? PreferredTwoFactorProvider { get; set; }
     
     [StringLength(50)]
-    public string? StripeCustomerId { get; set; }
+    public string? FirstName { get; set; }
     
     [StringLength(50)]
-    public required string FirstName { get; set; }
-    
-    [StringLength(50)]
-    public required string LastName { get; set; }    
+    public string? LastName { get; set; }    
     
     [StringLength(255)]
     public string? ProfilePicture { get; set; }

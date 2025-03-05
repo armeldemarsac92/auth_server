@@ -7,7 +7,6 @@ public static class ApiEndpointExtensions
     public static IEndpointRouteBuilder MapApiEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapAuthEndpoints();
-        app.MapSecurityEndpoints();
         app.MapRoleEndpoints();
         
         var endpoints = app.DataSources.SelectMany(ds => ds.Endpoints).OfType<RouteEndpoint>();

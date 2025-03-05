@@ -19,14 +19,17 @@ public class SecurityService : ISecurityService
 {
    private readonly IDistributedCache _cache;
    private readonly AuthConfiguration _configuration;
+   private readonly ILogger<SecurityService> _logger;
 
    public SecurityService(
        IDistributedCache cache, 
        AuthConfiguration configuration, 
-       HttpClient httpClient)
+       HttpClient httpClient, 
+       ILogger<SecurityService> logger)
    {
        _cache = cache;
        _configuration = configuration;
+       _logger = logger;
    }
    
 
@@ -54,6 +57,7 @@ public class SecurityService : ISecurityService
 
    public async Task<AuthStateData> ValidateState(string state)
    {
+       _logger.LogInformation("Retrieving state data from cache for state: {state} if exists", state);
        var stateJson = await _cache.GetStringAsync($"auth_state:{state}");
        if (string.IsNullOrEmpty(stateJson))
            throw new SecurityException($"Invalid or expired state: {stateJson}");
@@ -62,7 +66,8 @@ public class SecurityService : ISecurityService
        if (DateTime.UtcNow - stateData.Timestamp > TimeSpan.FromMinutes(15))
            throw new SecurityException("State expired");
        await _cache.RemoveAsync($"auth_state:{state}");
-
+       
+       _logger.LogInformation("State data validated and retrieved successfully for state: {state}", state);
        return stateData;
    }
 
@@ -79,7 +84,6 @@ public class SecurityService : ISecurityService
    }
 
    public Dictionary<string, string> MapTokenToUserDict(string idToken)
-       
    {
        var handler = new JwtSecurityTokenHandler();
        var jwtToken = handler.ReadJwtToken(idToken);

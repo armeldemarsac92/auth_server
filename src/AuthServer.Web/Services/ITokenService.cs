@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using AuthServer.Contracts.Config;
 using AuthServer.Contracts.Database;
+using AuthServer.Contracts.Exceptions;
 using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
@@ -11,6 +12,7 @@ namespace AuthServer.Web.Services;
 public interface ITokenService
 {
     Task<AccessTokenResponse> GetAccessTokenAsync(User user);
+    Task<AccessTokenResponse> RefreshTokenAsync(string refreshToken);
     ClaimsPrincipal ValidateToken(string token, bool validateLifetime = true);
 }
 
@@ -66,6 +68,16 @@ public class TokenService : ITokenService
         }
     }
 
+    public async Task<AccessTokenResponse> RefreshTokenAsync(string refreshToken)
+    {
+        _logger.LogInformation("Validating refresh token");
+        var claims = ValidateToken(refreshToken);
+        _logger.LogInformation("Valid refresh token, getting user details");
+        var user = await _userManager.GetUserAsync(claims);
+        CheckUser(user);
+        return await GetAccessTokenAsync(user);
+    }
+
     public ClaimsPrincipal ValidateToken(string token, bool validateLifetime = true)
     {
         _tokenValidationParams.ValidateLifetime = validateLifetime;
@@ -92,7 +104,6 @@ public class TokenService : ITokenService
             new(JwtRegisteredClaimNames.FamilyName, user.LastName ?? string.Empty),
             new("email_verified", user.EmailConfirmed.ToString().ToLower()),
             new("picture", user.ProfilePicture ?? string.Empty),
-            new("stripe_id", user.StripeCustomerId ?? string.Empty)
         };
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
@@ -108,5 +119,12 @@ public class TokenService : ITokenService
         );
 
         return tokenHandler.WriteToken(token);
+    }
+    
+    private void CheckUser(User? user)
+    {
+        if (user == null) throw new BadRequestException("User not found");
+        _logger.LogInformation("User {UserId} found.", user.Id);
+        if (user.LockoutEnabled) throw new BadRequestException($"User {user.Id} is locked out.");
     }
 }

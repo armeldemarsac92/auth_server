@@ -7,25 +7,24 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="AWSSDK.Core" Version="3.7.401.2" />
-        <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.82" />
-        <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.402.25" />
-        <PackageReference Include="Kralizek.Extensions.Configuration.AWSSecretsManager" Version="1.7.0" />
-        <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
-        <PackageReference Include="Serilog.Enrichers.AspNetCore.HttpContext" Version="1.0.1" />
-        <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
-        <PackageReference Include="Serilog.Enrichers.HttpHeader" Version="1.0.0" />
-        <PackageReference Include="Serilog.Enrichers.Process" Version="3.0.0" />
-        <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
-        <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
-        <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
-        <PackageReference Include="Serilog.Sinks.AwsCloudWatch" Version="4.3.37" />
-        <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+      <ProjectReference Include="..\AuthServer.Contracts\AuthServer.Contracts.csproj" />
     </ItemGroup>
 
-
     <ItemGroup>
-      <ProjectReference Include="..\AuthServer.Contracts\AuthServer.Contracts.csproj" />
+      <PackageReference Include="AWSSDK.Core" Version="3.7.401.2" />
+      <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.82" />
+      <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.402.25" />
+      <PackageReference Include="Kralizek.Extensions.Configuration.AWSSecretsManager" Version="1.7.0" />
+      <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+      <PackageReference Include="Serilog.Enrichers.AspNetCore.HttpContext" Version="1.0.1" />
+      <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
+      <PackageReference Include="Serilog.Enrichers.HttpHeader" Version="1.0.0" />
+      <PackageReference Include="Serilog.Enrichers.Process" Version="3.0.0" />
+      <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
+      <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+      <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
+      <PackageReference Include="Serilog.Sinks.AwsCloudWatch" Version="4.3.37" />
+      <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     </ItemGroup>
 
 </Project>

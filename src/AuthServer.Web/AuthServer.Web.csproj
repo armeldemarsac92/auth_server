@@ -31,7 +31,6 @@
     <ItemGroup>
       <ProjectReference Include="..\AuthServer.AWS.SDK\AuthServer.AWS.SDK.csproj" />
       <ProjectReference Include="..\AuthServer.Contracts\AuthServer.Contracts.csproj" />
-      <ProjectReference Include="..\AuthServer.Stripe.SDK\AuthServer.Stripe.SDK.csproj" />
     </ItemGroup>
 
 </Project>

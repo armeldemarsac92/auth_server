@@ -9,11 +9,11 @@ public static class IdentityExtensions
     {
         services.AddIdentity<User, Role>(options =>
             {
-                options.Password.RequireDigit = true;
-                options.Password.RequiredLength = 8;
+                options.Password.RequireDigit = false;
+                options.Password.RequiredLength = 0;
                 options.Password.RequireNonAlphanumeric = false;
-                options.Password.RequireUppercase = true;
-                options.Password.RequireLowercase = true;
+                options.Password.RequireUppercase = false;
+                options.Password.RequireLowercase = false;
 
                 options.User.RequireUniqueEmail = true;
                 options.SignIn.RequireConfirmedEmail = true;
@@ -22,8 +22,6 @@ public static class IdentityExtensions
                 options.Lockout.MaxFailedAccessAttempts = 5;
     
                 options.Tokens.AuthenticatorTokenProvider = TokenOptions.DefaultAuthenticatorProvider;
-                options.Tokens.AuthenticatorIssuer = "Epitech Project";
-    
             })
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddRoles<Role>()
