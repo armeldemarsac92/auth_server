@@ -11,5 +11,5 @@ public class LoginUserRequest
     public required string Password { get; set; }
     
     [JsonPropertyName("two_factor_code" )]
-    public string? TwoFactorCode { get; set; }
+    public required string TwoFactorCode { get; set; }
 }

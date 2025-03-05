@@ -25,73 +25,57 @@ public class TwoFaService : ITwoFaService
     }
     public async Task VerifyCodeAsync(User user, string code)
     {
-        try
+        _logger.LogInformation("Verifying user code for {UserId}", user.Id);
+
+        string providerName;
+        switch (user.PreferredTwoFactorProvider)
         {
-            _logger.LogInformation("Verifying user code for {UserId}", user.Id);
-
-            string providerName;
-            switch (user.PreferredTwoFactorProvider)
-            {
-                case TwoFactorType.Email:
-                    _logger.LogInformation("Using email provider");
-                    providerName = TokenOptions.DefaultEmailProvider;
-                    break;
-        
-                case TwoFactorType.SMS:
-                    _logger.LogInformation("Using SMS provider");
-                    providerName = TokenOptions.DefaultPhoneProvider;
-                    break;
-        
-                default:
-                    _logger.LogError("Unknown provider type: {provider}", user.PreferredTwoFactorProvider);
-                    throw new BadRequestException("Invalid two-factor provider configured.");
-            }
-
-            var isValid = await _userManager.VerifyTwoFactorTokenAsync(user, providerName, code);
-            if (!isValid)
-            {
-                _logger.LogWarning("Invalid verification code for user {UserId}", user.Id);
-                throw new BadRequestException("Invalid code.");
-            }
+            case TwoFactorType.Email:
+                _logger.LogInformation("Using email provider");
+                providerName = TokenOptions.DefaultEmailProvider;
+                break;
+    
+            case TwoFactorType.SMS:
+                _logger.LogInformation("Using SMS provider");
+                providerName = TokenOptions.DefaultPhoneProvider;
+                break;
+    
+            default:
+                _logger.LogError("Unknown provider type: {provider}", user.PreferredTwoFactorProvider);
+                throw new BadRequestException("Invalid two-factor provider configured.");
         }
-        catch (Exception ex)
+
+        var isValid = await _userManager.VerifyTwoFactorTokenAsync(user, providerName, code);
+        if (!isValid)
         {
+            _logger.LogWarning("Invalid verification code for user {UserId}", user.Id);
             await _userManager.AccessFailedAsync(user);
-            _logger.LogError("Error verifying user code: {Message} for {UserId}", ex.Message, user.Id);
-            throw;
+            throw new BadRequestException("Invalid code.");
         }
     }
 
     public async Task<string> GenerateCodeAsync(User user)
     {
-        try
+        _logger.LogInformation("Generating user code for {UserId}", user.Id);
+
+        string providerName;
+        switch (user.PreferredTwoFactorProvider)
         {
-            _logger.LogInformation("Generating user code for {UserId}", user.Id);
-    
-            string providerName;
-            switch (user.PreferredTwoFactorProvider)
-            {
-                case TwoFactorType.Email:
-                    _logger.LogInformation("Using email provider");
-                    providerName = TokenOptions.DefaultEmailProvider;
-                    break;
-            
-                case TwoFactorType.SMS:
-                    _logger.LogInformation("Using SMS provider");
-                    providerName = TokenOptions.DefaultPhoneProvider;
-                    break;
-            
-                default:
-                    _logger.LogError("Unknown provider type: {provider}", user.PreferredTwoFactorProvider);
-                    throw new BadRequestException("Invalid two-factor provider configured.");
-            }
-    
-            return await _userManager.GenerateTwoFactorTokenAsync(user, providerName);
+            case TwoFactorType.Email:
+                _logger.LogInformation("Using email provider");
+                providerName = TokenOptions.DefaultEmailProvider;
+                break;
+        
+            case TwoFactorType.SMS:
+                _logger.LogInformation("Using SMS provider");
+                providerName = TokenOptions.DefaultPhoneProvider;
+                break;
+        
+            default:
+                _logger.LogError("Unknown provider type: {provider}", user.PreferredTwoFactorProvider);
+                throw new BadRequestException("Invalid two-factor provider configured.");
         }
-        catch (Exception ex)
-        {
-            _logger.LogError("Error generating user code: {Message} for {UserId}", ex.Message, user.Id);
-            throw;
-        }
+
+        return await _userManager.GenerateTwoFactorTokenAsync(user, providerName);
     }
 }
