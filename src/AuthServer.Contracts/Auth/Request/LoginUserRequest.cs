@@ -7,9 +7,6 @@ public class LoginUserRequest
     [JsonPropertyName("email" )]
     public required string Email { get; set; }
     
-    [JsonPropertyName("password" )]
-    public required string Password { get; set; }
-    
     [JsonPropertyName("two_factor_code" )]
     public required string TwoFactorCode { get; set; }
 }
