@@ -1,209 +1,217 @@
-# Authentication Server
+# AuthServer - .NET 8 Authentication & Authorization Service
 
-A sophisticated, enterprise-grade authentication service built with .NET, providing comprehensive identity management, multi-factor authentication, OAuth integration, and payment processing capabilities. This system is designed with security, scalability, and flexibility in mind, supporting both traditional and modern authentication workflows.
+This repository contains a robust, feature-rich authentication and authorization service built with .NET 8. It provides a complete solution for user identity management with support for JWT tokens, two-factor authentication, and OAuth integration with external providers.
 
-## Table of Contents
+## Architecture Overview
 
-1. [Project Overview](#project-overview)
-2. [Core Features](#core-features)
-3. [Architecture](#architecture)
-4. [Prerequisites](#prerequisites)
-5. [Configuration](#configuration-guide)
-6. [Getting Started](#getting-started)
-7. [API Documentation](#api-documentation)
-8. [Security Features](#security-features-and-implementation)
+The solution is organized into three main projects:
 
-## Project Overview
+1. **AuthServer.Web**: The main ASP.NET Core web application that hosts the API endpoints and orchestrates all the authentication flows.
 
-This Authentication Server is designed as a complete identity management solution that combines modern authentication practices with cloud services integration. It serves as a centralized authentication and authorization system that can be easily integrated with other applications while maintaining high security standards and providing a seamless user experience.
+2. **AuthServer.Contracts**: Contains shared models, interfaces, database entities, and other contracts used across the solution.
+
+3. **AuthServer.AWS.SDK**: AWS integration components for CloudWatch logging, Secrets Manager configuration, and Simple Email Service (SES) for sending verification emails.
+
+The architecture follows clean code principles with:
+- Clear separation of concerns
+- Dependency injection throughout
+- Interface-based design
+- Middleware pipeline for cross-cutting concerns
+- Exception handling with appropriate HTTP status codes
 
 ## Core Features
 
-### Authentication Capabilities
-- Email and password authentication
-- Multi-factor authentication (2FA) with multiple provider options:
-  - Email-based verification codes
-  - Authenticator apps (TOTP)
-  - SMS verification
-- OAuth 2.0 and OpenID Connect support
-- External identity provider integration (Google, Facebook, etc.)
-- JWT-based authentication with refresh token rotation
-- Password reset and email verification workflows
-- Session management and security
+### User Authentication
 
-### Authorization Features
-- Role-based access control (RBAC)
-- Fine-grained permission system
-- User role management
-- Dynamic security policy enforcement
+- **JWT-based authentication**: Secure token generation with RS256 signing (public/private key)
+- **Token refresh mechanism**: Long-lived refresh tokens with short-lived access tokens
+- **Password-based authentication**: Standard username/password authentication with Identity framework
 
-### Integration Capabilities
-- AWS services integration (SES, CloudWatch, Secrets Manager)
-- Stripe payment processing
-- Event-driven user creation with MassTransit
-- Comprehensive logging infrastructure
+### Two-Factor Authentication
+
+- Email-based 2FA with verification codes
+- SMS-based 2FA capability (configurable)
+- Customizable 2FA flow with preferred provider selection
+
+### OAuth/External Authentication
+
+- Google OAuth 2.0 integration
+- Facebook OAuth integration
+- Extensible architecture for adding other providers
+- PKCE flow for enhanced security
+- State validation to prevent CSRF attacks
+
+### User Management
+
+- User registration with email verification
+- User profile updates
+- Role-based authorization
+- Admin capabilities for role management
+- Custom user claims for enhanced authorization
 
 ### Security Features
-- CSRF/XSRF protection
-- Rate limiting for brute force attack prevention
-- Modern password hashing
-- SSL/TLS enforcement
-- Security headers management
-- Request validation
-- Secure token handling
 
-## Architecture
+- HTTPS enforcement
+- CORS configuration
+- Anti-forgery protection
+- Secure cookie policies
+- Input validation
+- Rate limiting
+- Exception handling with security in mind
 
-The authentication server follows a modular, clean architecture pattern that separates concerns and maintains high cohesion between related functionalities.
+### AWS Integration
 
-### Solution Structure
+- CloudWatch logging for centralized log management
+- Secrets Manager for secure configuration
+- SES for transactional emails
+- Environment-based configuration
+
+## Authentication Flows
+
+### Registration Flow
+
+1. User provides email (via `/api/auth/register` endpoint)
+2. System creates user in database with the `User` role
+3. System generates 2FA verification code
+4. System sends verification code via email using AWS SES
+5. System returns `requiresTwoFactor: true` response
+6. User provides the verification code to complete registration
+7. User is now registered and can log in
+
+### Login Flow
+
+1. User provides email and password (via `/api/auth/login` endpoint)
+2. System validates credentials
+3. System may require 2FA (sends code via preferred method)
+4. User provides 2FA code
+5. System validates the code and confirms the user if needed
+6. System generates JWT access and refresh tokens
+7. Tokens are returned to the user
+
+### External Provider Flow (OAuth)
+
+1. User initiates OAuth flow by visiting `/api/auth/external-login/{provider}`
+2. System generates state and PKCE challenge for security
+3. System stores authentication parameters in distributed cache
+4. User is redirected to provider's authorization endpoint
+5. User authenticates with the provider and grants permissions
+6. Provider redirects back to `/api/auth/external-callback` with authorization code
+7. System exchanges code for tokens with provider
+8. System validates state to prevent CSRF attacks
+9. System retrieves user info from provider
+10. System creates or updates user with provider information
+11. System generates JWT tokens and sets cookies
+12. User is redirected to frontend application
+
+### Token Refresh Flow
+
+1. User sends refresh token to `/api/auth/refresh` endpoint
+2. System validates the refresh token
+3. System generates new access and refresh tokens
+4. New tokens are returned to the user
+
+## API Endpoints
+
+### Authentication Endpoints
+
+- `POST /api/auth/register` - Register a new user
+- `POST /api/auth/login` - Authenticate a user
+- `POST /api/auth/update` - Update user profile
+- `POST /api/auth/refresh` - Refresh authentication tokens
+- `POST /api/auth/resend-code` - Resend 2FA verification code
+- `GET /api/auth/external-login/{provider}` - Initiate OAuth flow
+- `GET /api/auth/external-callback` - OAuth callback endpoint
+- `GET /api/auth/healthcheck` - Service health check
+
+### Role Management Endpoints
+
+- `GET /api/roles` - Get all roles
+- `POST /api/roles` - Create a new role
+- `DELETE /api/roles/{roleName}` - Delete a role
+- `POST /api/users/{userId}/roles` - Add user to role
+- `DELETE /api/users/{userId}/roles/{roleName}` - Remove user from role
+- `GET /api/users/{userId}/roles` - Get user roles
+
+## Database Schema
+
+The service uses Entity Framework Core with PostgreSQL and implements the ASP.NET Core Identity schema with custom extensions:
+
+- **AspNetUsers** - User data with custom fields:
+  - PreferredTwoFactorProvider
+  - FirstName, LastName
+  - ProfilePicture
+  - CreatedAt, UpdatedAt
+
+- **AspNetRoles** - Role definitions
+- **AspNetUserRoles** - User-role relationships
+- **AspNetUserClaims** - User claims
+- **AspNetUserLogins** - External login associations
+- **AspNetUserTokens** - User tokens
+
+## AWS Integration Setup
+
+### AWS Secrets Manager Integration
+
+The AuthServer uses AWS Secrets Manager to securely store and retrieve sensitive configuration such as database credentials, JWT signing keys, and OAuth client secrets. Here's how to set it up:
+
+### 1. AWS Secrets Structure
+
+The application expects secrets to be organized in the following structure in AWS Secrets Manager:
 
 ```
-AuthServer/
-├── src/
-│   ├── AuthServer.Web/              # Main application host
-│   ├── AuthServer.Contracts/        # Domain models and interfaces
-│   ├── AuthServer.AWS.SDK/          # AWS integration services
-│   └── AuthServer.Stripe.SDK/       # Stripe payment integration
+{projectname}/{environment}/shared/{secret-type}
 ```
 
-### Component Overview
+Where:
+- `{environment}` is your environment name (e.g., Development, Staging, Production)
+- `{projectname}` is the name of your project
+- `{secret-type}` is one of the defined secret types: database, auth
 
-#### AuthServer.Web
-The main application entry point that handles HTTP requests and orchestrates the authentication workflows. Key components include:
+For example:
+- `myproject/Development/shared/database`
+- `myproject/Production/shared/auth`
 
-- **Endpoints**: API endpoints organized by functionality (Auth, Roles, Security)
-- **Middlewares**: Request processing, exception handling, and logging
-- **Extensions**: Service configuration and setup
-- **Services**: Core business logic implementation
-- **Migrations**: Database schema management
+### 2. Required Secret Configuration
 
-#### AuthServer.Contracts
-Contains the core business models, interfaces, and shared contracts:
-
-- **Auth Models**: Request/response models for authentication operations
-- **Configuration**: Application configuration models
-- **Database**: Entity definitions and database context
-- **Exceptions**: Custom exception types for domain-specific errors
-
-#### AuthServer.AWS.SDK
-Handles AWS service integrations:
-
-- **CloudWatch**: Application monitoring and logging
-- **SES**: Email service for user communications
-- **SecretsManager**: Secure configuration management
-
-#### AuthServer.Stripe.SDK
-Manages payment processing functionality:
-
-- **Customer Management**: User payment profiles
-- **Payment Processing**: Transaction handling
-- **Invoice Management**: Billing operations
-
-## Prerequisites
-
-Before setting up the Authentication Server, you'll need to configure several external services and ensure your development environment meets specific requirements:
-
-### Development Environment
-- .NET 8.0 SDK or later
-- PostgreSQL 13.0 or later
-- Redis 6.2 or later for distributed caching (optional, the server uses in-memory caching by default)
-- Git for version control
-- Visual Studio 2022 or JetBrains Rider
-
-### AWS Services Configuration
-
-The authentication server relies on several AWS services, each requiring specific configuration:
-
-#### AWS Secrets Manager
-The application uses a hierarchical structure for managing configuration secrets:
-```
-authServer/{environment}/shared/{config-type}
-```
-where:
-- `environment` is either "dev" or "prod"
-- `config-type` can be "database", "networking", "stripe", "auth", or "cache"
-
-You'll need to create these secrets in AWS Secrets Manager within the eu-central-1 (Frankfurt) region. Each secret should contain JSON-formatted configuration data matching the corresponding configuration model.
-
-#### AWS Simple Email Service (SES)
-For handling email communications, you'll need:
-- A verified sender domain or email address in SES
-- Appropriate sending limits configured
-- Production access if you plan to send to non-verified recipients
-- SES configured in the same region as your other AWS services
-
-### Stripe Integration
-To handle the user creation operations:
-- Create a Stripe account
-- Obtain API keys (both test and live)
-- Configure webhook endpoints
-
-### Required AWS IAM Permissions
-Create an IAM user or role with these permissions:
-
+#### Database Secret (required)
 ```json
 {
-    "Version": "2012-10-01",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "secretsmanager:GetSecretValue",
-                "secretsmanager:ListSecrets"
-            ],
-            "Resource": "arn:aws:secretsmanager:eu-central-1:*:secret:authServer/*"
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ses:SendEmail",
-                "ses:SendRawEmail"
-            ],
-            "Resource": "*"
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "logs:CreateLogGroup",
-                "logs:CreateLogStream",
-                "logs:PutLogEvents"
-            ],
-            "Resource": "arn:aws:logs:eu-central-1:*:log-group:/aws/authServer/*"
-        }
-    ]
+  "database": {
+    "Key": "your-database-key",
+    "Url": "your-database-url",
+    "Email": "your-database-admin-email",
+    "Password": "your-database-password",
+    "DbConnectionString": "Host=your-host;Database=your-db;Username=your-user;Password=your-password;",
+    "SslCert": "your-ssl-cert-if-needed"
+  }
 }
 ```
 
-## Configuration Guide
-
-### AWS Secrets Manager Structure
-
-The application uses AWS Secrets Manager to securely store sensitive configuration. Below is the complete configuration structure:
-
+#### Auth Secret (required)
 ```json
 {
-  "AuthConfiguration": {
-    "CorsAllowOrigin": "https://yourdomain.com",
-    "JwtIssuer": "your-issuer",
+  "auth": {
+    "CorsAllowOrigin": "https://your-frontend-origin.com",
+    "JwtIssuer": "https://your-auth-server.com",
     "JwtAudience": "your-audience",
-    "PrivateKey": "-----BEGIN PRIVATE KEY-----\n...",
-    "PublicKey": "-----BEGIN PUBLIC KEY-----\n...",
+    "PrivateKey": "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----",
+    "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
     "SourceEmail": "noreply@yourdomain.com",
-    "SmtpUsername": "AKIAXXXXXXXXXXXXXXXX",
+    "SmtpUsername": "your-smtp-username",
     "SmtpPassword": "your-smtp-password",
     "IdentityProviders": [
       {
-        "Name": "Google",
+        "Name": "google",
         "ClientId": "your-google-client-id",
         "ClientSecret": "your-google-client-secret",
-        "RedirectUri": "https://yourdomain.com/api/auth/external-callback",
+        "RedirectUri": "https://your-auth-server.com/api/auth/external-callback",
         "Scope": "openid email profile",
         "GrantType": "authorization_code",
         "ResponseType": "code",
+        "CodeEndpoint": "https://accounts.google.com/o/oauth2/v2/auth",
         "TokenEndpoint": "https://oauth2.googleapis.com/token",
-        "UserInfoEndpoint": "https://www.googleapis.com/oauth2/v3/userinfo",
-        "FrontEndRedirectUri": "https://yourdomain.com/auth/callback",
+        "UserInfoEndpoint": "https://openidconnect.googleapis.com/v1/userinfo",
+        "FrontEndRedirectUri": "https://your-frontend.com/auth/callback",
         "UserClaims": {
           "sub": "sub",
           "email": "email",
@@ -214,16 +222,17 @@ The application uses AWS Secrets Manager to securely store sensitive configurati
         }
       },
       {
-        "Name": "Facebook",
+        "Name": "facebook",
         "ClientId": "your-facebook-client-id",
         "ClientSecret": "your-facebook-client-secret",
-        "RedirectUri": "https://yourdomain.com/api/auth/external-callback",
+        "RedirectUri": "https://your-auth-server.com/api/auth/external-callback",
         "Scope": "email public_profile",
         "GrantType": "authorization_code",
         "ResponseType": "code",
-        "TokenEndpoint": "https://graph.facebook.com/v12.0/oauth/access_token",
-        "UserInfoEndpoint": "https://graph.facebook.com/me",
-        "FrontEndRedirectUri": "https://yourdomain.com/auth/callback",
+        "CodeEndpoint": "https://www.facebook.com/v16.0/dialog/oauth",
+        "TokenEndpoint": "https://graph.facebook.com/v16.0/oauth/access_token",
+        "UserInfoEndpoint": "https://graph.facebook.com/v16.0/me",
+        "FrontEndRedirectUri": "https://your-frontend.com/auth/callback",
         "UserClaims": {
           "sub": "id",
           "email": "email",
@@ -234,495 +243,271 @@ The application uses AWS Secrets Manager to securely store sensitive configurati
         }
       }
     ]
-  },
-  "DatabaseConfiguration": {
-    "DbConnectionString": "Host=...;Database=...;Username=...;Password=..."
-  },
-  "StripeConfiguration": {
-    "ApiKey": "sk_test_...",
-    "PaymentWebhookSecret": "whsec_..."
   }
 }
 ```
 
-## API Documentation
+### 3. Setting Up AWS Credentials
 
-### Authentication Routes (`/api/auth/*`)
+The application uses the AWS SDK's default credential provider chain, which means it will look for credentials in the following order:
 
-The authentication endpoints handle all aspects of user identity and authentication flows.
+1. Environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+2. AWS credentials file (~/.aws/credentials)
+3. Instance profile credentials (if running on EC2 or ECS)
 
-#### User Registration and Login
+For local development, you can set up the AWS CLI and run `aws configure` to create your credentials file.
 
-```
-POST /api/auth/register
-```
-Creates a new user account. The registration process includes email verification and optional 2FA setup.
+### 4. Project Configuration
 
-Request body:
-```json
-{
-  "email": "user@example.com",
-  "first_name": "John",
-  "last_name": "Doe",
-  "profile_picture": "https://example.com/avatar.jpg",
-  "password": "securePassword123"
-}
-```
-
-```
-POST /api/auth/login
-```
-Authenticates a user and returns JWT tokens. Handles 2FA challenges when enabled.
-
-Request body:
-```json
-{
-  "email": "user@example.com",
-  "password": "securePassword123",
-  "two_factor_code": "123456"
-}
-```
-
-Response:
-```json
-{
-  "accessToken": "eyJhbGciOiJ...",
-  "refreshToken": "eyJhbGciOiJ...",
-  "expiresIn": 3600
-}
-```
-
-You're right, I didn't cover the Simple Login functionality in detail. Let me add that section to the API documentation:
-
-### Simple Login Flow
-
-The Simple Login flow provides a streamlined authentication experience for returning users, particularly in scenarios where traditional password entry isn't required (like when using external identity providers or leveraging 2FA directly).
-
-```
-POST /api/auth/simple-login
-```
-
-Initiates a login flow based on the user's email and preferred 2FA method, bypassing the initial password authentication step when appropriate.
-
-Request body:
-```json
-{
-  "email": "user@example.com",
-  "two_factor_code": "123456"
-}
-```
-
-Response when 2FA is required:
-```json
-{
-  "requiresTwoFactor": true,
-  "provider": "Email"
-}
-```
-
-Response after successful 2FA verification:
-```json
-{
-  "accessToken": "eyJhbGciOiJ...",
-  "refreshToken": "eyJhbGciOiJ...",
-  "expiresIn": 3600
-}
-```
-
-#### Implementation Details
-
-The Simple Login endpoint streamlines the authentication process by:
-
-1. Looking up a user by email without initial password verification
-2. Determining the user's preferred 2FA method
-3. Initiating the appropriate 2FA challenge (email, authenticator app, or SMS)
-4. Verifying 2FA codes when provided
-5. Issuing authentication tokens upon successful verification
+The integration with Secrets Manager is set up in the `Program.cs` file using:
 
 ```csharp
-private static async Task<IResult> SimpleLogin(
-    UserManager<User> userManager,
-    ITokenService tokenService,
-    SignInManager<User> signInManager,
-    IEmailService emailService,
-    SimpleLoginRequest request)
+builder.AddAwsConfiguration(SecretType.Database, SecretType.Auth, SecretType.Stripe);
+```
+
+This extension method is defined in `AuthServer.AWS.SDK.SecretsManager.ConfigurationExtensions` and it does the following:
+
+1. Retrieves the environment name from `ASPNETCORE_ENVIRONMENT`
+2. Configures AWS Secrets Manager as a configuration source
+3. Sets up a key generator to map secret paths to configuration keys
+4. Filters secrets based on the specified secret types
+5. Adds the retrieved configuration to appropriate services
+
+### AWS CloudWatch Integration
+
+The application integrates with AWS CloudWatch for centralized logging. Here's how to set it up:
+
+### 1. CloudWatch Configuration
+
+In your `appsettings.json` (and environment-specific variants), configure the CloudWatch settings:
+
+```json
 {
-    var user = await userManager.FindByEmailAsync(request.Email);
-    if (user == null)
-    {
-        throw new BadRequestException("User not found");
+  "AWS": {
+    "Region": "eu-central-1",
+    "CloudWatch": {
+      "LogGroupName": "your-app-name-auth"
     }
-    
-    switch (user.PreferredTwoFactorProvider)
-    {
-        case TwoFactorType.Email:
-            var emailToken = await signInManager.UserManager.GenerateTwoFactorTokenAsync(user, "Email");
-            await emailService.SendEmailAsync(
-                user.Email,
-                "2FA Code",
-                $"Your verification code is: {emailToken}");
-            return Results.Ok(new { requiresTwoFactor = true, provider = "Email" });
-            
-        case TwoFactorType.Authenticator:
-            if (!string.IsNullOrEmpty(request.TwoFactorCode))
-            {
-                var isValid = await userManager.VerifyTwoFactorTokenAsync(user, 
-                    TokenOptions.DefaultAuthenticatorProvider, 
-                    request.TwoFactorCode);
-
-                if (isValid)
-                {
-                    return Results.Ok(await tokenService.GetAccessTokenAsync(user));
-                }
-                throw new BadRequestException("Invalid 2FA code");
-            }
-            return Results.Ok(new { requiresTwoFactor = true, provider = "Authenticator" });
-            
-        // Additional 2FA methods handled similarly
-    }
+  }
 }
 ```
 
-This approach is particularly useful for applications where:
-- Users primarily authenticate with external identity providers
-- 2FA is mandatory across the application
-- You want to provide a simplified login experience for returning users
-- You're implementing passwordless authentication flows
+The actual CloudWatch integration is configured in `AuthServer.AWS.SDK.CloudWatch.CloudWatchExtension`. It sets up Serilog to:
 
-The Simple Login integrates with the 2FA verification endpoint to complete the authentication process, making it a versatile option for modern authentication scenarios.
+1. Read log settings from configuration
+2. Enrich logs with context information
+3. Write logs to both the console and CloudWatch
+4. Create log groups and streams automatically
 
-#### Email Verification Flow
+### 2. Log Structure
 
+The application creates a log group with the name pattern:
 ```
-GET /api/auth/confirm-email/{userId}/{token}
+{configuration["AWS:CloudWatch:LogGroupName"]}-{environment}
 ```
-Validates email confirmation tokens sent to users upon registration.
 
-```
-POST /api/auth/resend-confirmation
-```
-Resends the confirmation email if the original expires or is lost.
+For example, if your configuration specifies `LogGroupName` as `my-app-auth` and your environment is `Production`, the log group will be `my-app-auth-Production`.
 
-Request body:
+### AWS Simple Email Service (SES) Integration
+
+The application uses AWS SES to send verification codes and other emails. Here's how to set it up:
+
+### 1. SES Configuration
+
+The SES integration is set up in `AuthServer.AWS.SDK.SES.AwsSesEmailService` and relies on the Auth configuration:
+
 ```json
 {
-  "email": "user@example.com"
+  "auth": {
+    "SourceEmail": "noreply@yourdomain.com"
+    // ...other auth settings
+  }
 }
 ```
 
-#### Password Management
+### 2. Verifying Email Domains/Addresses
 
-```
-POST /api/auth/forgot-password
-```
-Initiates the password reset flow by sending a reset code via email.
+Before you can send emails with SES:
 
-```
-POST /api/auth/reset-password
-```
-Completes the password reset process with a valid reset token.
+1. Verify your domain or email address in the SES console
+2. If your account is in the SES sandbox, you must also verify recipient email addresses
+3. For production, request to move out of the SES sandbox
 
-#### Two-Factor Authentication
+### 3. Email Templates
 
-```
-POST /api/2fa/enable/{type}
-```
-Enables 2FA for a user account. Supported types include "authenticator", "email", and "sms".
+The application has basic HTML templates for:
+- Verification code emails
+- Generic message emails
 
-```
-POST /api/2fa/verify
-```
-Verifies 2FA setup or login challenges.
+You can customize these in the `AwsSesEmailService.cs` file.
 
-Request body:
+## JWT Key Pair Generation
+
+For JWT authentication, you need to generate an RSA key pair. Here's how to do it using OpenSSL:
+
+```bash
+# Generate a private key
+openssl genrsa -out private.pem 2048
+
+# Extract the public key from the private key
+openssl rsa -in private.pem -pubout -out public.pem
+```
+
+Store these keys in AWS Secrets Manager as part of your Auth configuration, with proper line breaks preserved using `\n`:
+
 ```json
 {
-  "verification_code": "123456"
+  "auth": {
+    "PrivateKey": "-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----",
+    "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+    // ...other auth settings
+  }
 }
 ```
 
-```
-POST /api/2fa/disable
-```
-Disables 2FA for a user account (requires authentication).
+## Deployment
 
-#### OAuth/External Authentication
+The repository includes a Dockerfile for containerized deployment. The application is designed to work well with:
 
-```
-GET /api/auth/external-login/{provider}
-```
-Initiates OAuth flow with specified provider (e.g., "google", "facebook").
+- AWS ECS (Elastic Container Service)
+- AWS EKS (Elastic Kubernetes Service)
+- AWS App Runner
+- Amazon EC2 instances
+- Any container orchestration platform
 
-```
-GET /api/auth/external-callback
-```
-Handles OAuth provider callbacks and user creation/login.
+### Building the Docker Image
 
-#### Token Management
-
-```
-POST /api/auth/refresh
-```
-Issues new access tokens using a valid refresh token.
-
-Request body:
-```json
-{
-  "refresh_token": "eyJhbGciOiJ..."
-}
+```bash
+docker build -t authserver:latest .
 ```
 
-### Role Management Routes (`/api/roles/*`)
+### Running the Container
 
-These endpoints manage user roles and permissions within the system.
-
-```
-GET /api/roles
-```
-Returns all available roles in the system.
-
-```
-POST /api/roles
-```
-Creates a new role.
-
-```
-DELETE /api/roles/{roleName}
-```
-Removes an existing role.
-
-```
-POST /api/users/{userId}/roles
-```
-Assigns roles to a user.
-
-```
-DELETE /api/users/{userId}/roles/{roleName}
-```
-Removes a role from a user.
-
-```
-GET /api/users/{userId}/roles
-```
-Retrieves all roles assigned to a user.
-
-## Security Features and Implementation
-
-The authentication server implements a comprehensive security architecture built around several core services working together to ensure secure authentication and authorization.
-
-### Token Service Implementation
-
-The token service manages JWT generation and validation using asymmetric RSA encryption:
-
-```csharp
-public class TokenService : ITokenService
-{
-    // Key validation parameters ensure tokens are properly verified
-    private readonly TokenValidationParameters _tokenValidationParams;
-    
-    public async Task<AccessTokenResponse> GetAccessTokenAsync(User user)
-    {
-        // Generate short-lived 60-minute access token and 24-hour refresh token
-        var tokenExpiration = TimeSpan.FromMinutes(60);
-        var accessToken = await GenerateToken(user, tokenExpiration);
-        var refreshToken = await GenerateToken(user, TimeSpan.FromDays(1));
-        
-        return new AccessTokenResponse
-        { 
-            AccessToken = accessToken,
-            RefreshToken = refreshToken,
-            ExpiresIn = (int)tokenExpiration.TotalSeconds 
-        };
-    }
-}
+```bash
+docker run -p 8080:8080 \
+  -e ASPNETCORE_ENVIRONMENT=Production \
+  -e AWS_ACCESS_KEY_ID=your-access-key \
+  -e AWS_SECRET_ACCESS_KEY=your-secret-key \
+  -e AWS_REGION=eu-central-1 \
+  authserver:latest
 ```
 
-The tokens contain essential user claims including:
-- Subject (user ID)
-- Email
-- Name (given name and family name)
-- Email verification status
-- Profile picture
-- Stripe customer ID
-- User roles
+For production deployments, use IAM roles instead of hardcoded AWS credentials.
 
-### Security Service Features
+## Getting Started for Development
 
-The security service handles OAuth state management and token validation:
+### Prerequisites
 
-1. **State Management**: Securely stores authentication parameters in a distributed cache:
-```csharp
-public async Task StoreAuthState(AuthenticationParameters authParameters)
-{
-    // Store state with 15-minute expiration
-    await _cache.SetStringAsync(
-        $"auth_state:{authParameters.State}",
-        JsonSerializer.Serialize(stateData),
-        new DistributedCacheEntryOptions
-        {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(15)
-        }
-    );
-}
-```
+- .NET 8 SDK
+- PostgreSQL database
+- AWS account with appropriate permissions
+- AWS CLI configured locally
 
-2. **State Validation**: Ensures OAuth callbacks match stored state and haven't expired:
-```csharp
-public async Task<AuthStateData> ValidateState(string state)
-{
-    var stateData = JsonSerializer.Deserialize<AuthStateData>(stateJson);
-    if (DateTime.UtcNow - stateData.Timestamp > TimeSpan.FromMinutes(15))
-        throw new SecurityException("State expired");
-}
-```
+### Local Development Setup
 
-### Key Management Service
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/authserver.git
+   cd authserver
+   ```
 
-The key service manages RSA key pairs for JWT signing and verification:
+2. Set the required environment variables:
+   ```bash
+   export PROJECT_NAME=myproject
+   export ASPNETCORE_ENVIRONMENT=Development
+   ```
 
-```csharp
-public class KeyService : IKeyService
-{
-    public RsaSecurityKey PublicKey { get; }
-    public RsaSecurityKey PrivateKey { get; }
-    
-    // Keys are loaded from configuration and imported as RSA parameters
-    public KeyService(IConfiguration configuration)
-    {
-        using (var rsaPublic = RSA.Create())
-        {
-            rsaPublic.ImportFromPem(config.PublicKey);
-            PublicKey = new RsaSecurityKey(rsaPublic.ExportParameters(false));
-        }
-    }
-}
-```
+3. Set up your AWS configuration:
+   ```bash
+   aws configure
+   ```
 
-### Authentication Service
+4. Restore dependencies and build:
+   ```bash
+   dotnet restore
+   dotnet build
+   ```
 
-The authentication service handles OAuth flows and user information retrieval:
+5. Run database migrations:
+   ```bash
+   cd src/AuthServer.Web
+   dotnet ef database update
+   ```
 
-1. **OAuth Login Flow**: Builds authorization URLs with proper security parameters:
-```csharp
-public string BuildLoginUri(AuthenticationParameters parameters)
-{
-    // Include PKCE challenge and state parameter for security
-    var queryParams = new Dictionary<string, string>
-    {
-        ["state"] = parameters.State,
-        ["code_challenge"] = parameters.Challenge,
-        ["code_challenge_method"] = "S256"
-    };
-}
-```
+6. Run the application:
+   ```bash
+   dotnet run
+   ```
 
-2. **Token Exchange**: Securely exchanges authorization codes for tokens:
-```csharp
-public async Task<TokenResponse> ExchangeCodeForTokens(AuthenticationParameters parameters)
-{
-    // Include PKCE verifier in token request
-    var tokenRequest = new Dictionary<string, string>
-    {
-        ["code_verifier"] = parameters.ChallengeVerifier,
-        ["code"] = parameters.AuthorizationCode
-    };
-}
-```
+7. Access the Swagger documentation at `https://localhost:7058/swagger`
 
-3. **Claims Mapping**: Standardizes user claims across different identity providers:
-```csharp
-public async Task<UserInfos> GetUserInfosAsync(AuthenticationParameters parameters)
-{
-    // Map provider-specific claims to standardized format
-    foreach (var (key, value) in userInfoDictionary)
-    {
-        var destinationClaim = mappings.FirstOrDefault(m => 
-            m.Value.ToString() == key).Key;
-        if (!string.IsNullOrEmpty(destinationClaim))
-        {
-            mappedUser.Add(destinationClaim, value);
-        }
-    }
-}
-```
+## Core Components and Services
 
-### Authentication Flow Integration
+Let me go into more depth on some of the core services and how they interact with each other:
 
-When a user initiates external authentication, a carefully orchestrated sequence of security checks and validations occurs:
+### UserService
 
-#### Initial Authentication Request
+The `UserService` is the central service for user management. It handles:
 
-When a user clicks "Login with Google" (or another provider), the `ExternalLogin` endpoint springs into action:
+- User registration
+- User authentication
+- User profile updates
+- Two-factor authentication workflows
+- External login provisioning
 
-```csharp
-private static async Task<IResult> ExternalLogin(
-    HttpContext context,
-    string provider,
-    AuthConfiguration configuration,
-    IAuthService authService,
-    ISecurityService securityService)
-{
-    var authParameters = new AuthenticationParameters(provider);
-    await securityService.StoreAuthState(authParameters);
-    var loginUri = authService.BuildLoginUri(authParameters);
-    return Results.Ok(loginUri);
-}
-```
+Key interactions:
+- Works with `UserManager<User>` for identity operations
+- Uses `IEmailService` to send verification codes
+- Uses `ITwoFaService` for 2FA operations
+- Uses `ITokenService` for JWT generation
+- Uses `IAuthService` for OAuth integration
 
-This initial step creates a secure foundation for the authentication process by storing a time-limited state token in the distributed cache, while the AuthService constructs a secure authorization URL that includes PKCE protection against interception attacks.
+### AuthService
 
-#### Handling the OAuth Callback
+The `AuthService` handles external authentication flows. It:
 
-The callback handling demonstrates how multiple security services work in concert to validate and process the authentication response:
+- Initiates OAuth flows with providers
+- Validates state parameters
+- Exchanges authorization codes for tokens
+- Retrieves user information from providers
+- Maps provider-specific user data to standardized formats
 
-```csharp
-private static async Task<IResult> Callback(
-    HttpContext context,
-    ISecurityService securityService,
-    IAuthService authService,
-    ITokenService tokenService,
-    /* other dependencies */)
-{
-    // First security check: Validate the state parameter
-    var state = context.GetUriParameterFromHttpContext("state");
-    var authStateData = await securityService.ValidateState(state);
-    
-    // Exchange authorization code securely
-    var code = context.GetUriParameterFromHttpContext("code");
-    authParameters.AuthorizationCode = code;
-    var tokenResponse = await authService.ExchangeCodeForTokens(authParameters);
-    
-    // Get and standardize user information
-    var userInfos = await authService.GetUserInfosAsync(authParameters);
-    
-    // Generate secure application tokens
-    var accessTokenResponse = await tokenService.GetAccessTokenAsync(user);
-}
-```
+Key interactions:
+- Uses `ISecurityService` for state management
+- Uses HTTP clients to communicate with OAuth providers
+- Returns standardized user information to `UserService`
 
-This callback process implements multiple layers of security, from state validation to secure code exchange and standardized identity handling.
+### TokenService
 
-### Cookie Security Implementation
+The `TokenService` manages JWT creation and validation. It:
 
-The final step involves secure cookie handling for the generated tokens:
+- Generates JWT access tokens
+- Generates refresh tokens
+- Validates and refreshes tokens
+- Creates appropriate claims for users
 
-```csharp
-private static void AddCookies(HttpContext context, AccessTokenResponse accessTokenResponse)
-{
-    var cookieOptions = new CookieOptions
-    {
-        HttpOnly = false,  // Allows JavaScript access for client-side features
-        Secure = true,     // Requires HTTPS
-        SameSite = SameSiteMode.Lax,   // Protects against CSRF
-        Expires = DateTimeOffset.UtcNow.AddHours(2),
-        Domain = isDev ? ".localhost" : ".yourdomain.com",
-        Path = "/"
-    };
-    
-    context.Response.Cookies.Append("access_token", accessTokenResponse.AccessToken, cookieOptions);
-}
-```
+Key interactions:
+- Uses `IKeyService` for cryptographic operations
+- Works with `UserManager<User>` to retrieve user details
+- Creates security tokens with user claims and roles
 
-The cookie configuration provides several security features to protect authentication tokens.
+### Security Service
 
-This comprehensive security implementation ensures that user authentication flows are protected at every step, from initial login to token usage, providing a robust foundation for application security.
+The `SecurityService` handles security-related operations:
+
+- Generates and validates state parameters for OAuth
+- Creates and validates PKCE challenges
+- Stores authentication state in distributed cache
+- Validates ID tokens from providers
+
+Key interactions:
+- Uses `IDistributedCache` for temporary state storage
+- Implements security best practices for OAuth flows
+
+### AWS Integration Services
+
+- `AwsSesEmailService`: Handles email delivery via AWS SES
+- `CloudWatchExtension`: Configures Serilog for AWS CloudWatch
+- `ConfigurationExtensions`: Sets up AWS Secrets Manager for configuration
+
+These services provide a seamless integration with AWS services while abstracting the complexity from the rest of the application.

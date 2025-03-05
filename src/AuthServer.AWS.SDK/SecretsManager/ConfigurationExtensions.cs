@@ -14,8 +14,7 @@ public static class ConfigurationExtensions
 {
     public static WebApplicationBuilder AddAwsConfiguration(this WebApplicationBuilder builder, params SecretType[] secretTypes)
     {
-        var baseEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        ConfigureAwsSecrets(builder.Configuration, baseEnv, secretTypes);
+        ConfigureAwsSecrets(builder.Configuration, secretTypes);
         AddConfigurationOptions(builder.Services, builder.Configuration, secretTypes);
         return builder;
     }
@@ -25,8 +24,7 @@ public static class ConfigurationExtensions
         
         hostBuilder.ConfigureAppConfiguration((context, builder) =>
         {
-            var baseEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-            ConfigureAwsSecrets(builder, baseEnv, secretTypes);
+            ConfigureAwsSecrets(builder, secretTypes);
         });
 
         hostBuilder.ConfigureServices((context, services) =>
@@ -39,17 +37,17 @@ public static class ConfigurationExtensions
     
     public static IHostApplicationBuilder AddAwsConfiguration(this IHostApplicationBuilder builder, params SecretType[] secretTypes)
     {
-        var baseEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-        ConfigureAwsSecrets(builder.Configuration, baseEnv, secretTypes);
+        ConfigureAwsSecrets(builder.Configuration, secretTypes);
         AddConfigurationOptions(builder.Services, builder.Configuration, secretTypes);
         return builder;
     }
     
-    public static void ConfigureAwsSecrets(this IConfigurationBuilder builder, string? baseEnv, params SecretType[] secretTypes)
+    public static void ConfigureAwsSecrets(this IConfigurationBuilder builder, params SecretType[] secretTypes)
     {
+        var projectName = Environment.GetEnvironmentVariable("PROJECT_NAME") ?? throw new Exception("PROJECT_NAME missing.") ;
+        var baseEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? throw new Exception("ASPNETCORE_ENVIRONMENT missing.") ;
 
-        if (string.IsNullOrEmpty(baseEnv)) throw new Exception("ASPNETCORE_ENVIRONMENT missing.");
-        string sharedBase = $"tdev702/{baseEnv}/shared/";
+        string sharedBase = $"{projectName}/{baseEnv}/shared/";
         
         var filterValues = secretTypes.Select(t => $"{sharedBase}{t.ToString().ToLower()}").ToList();
         
